@@ -96,8 +96,9 @@ class FNO3d(nn.Module):
         self.modes3 = modes3
         self.width = width
         self.padding = 6 # pad the domain if input is non-periodic
-        self.fc0 = nn.Linear(13, self.width)
-        # input channel is 12: the solution of the first 10 timesteps + 3 locations (u(1, x, y), ..., u(10, x, y),  x, y, t)
+        # self.padding = 0
+        self.fc0 = nn.Linear(4, self.width)
+        # input channel is 13: the solution of the first 10 timesteps + 3 locations (u(1, x, y), ..., u(10, x, y),  x, y, t)
 
         self.conv0 = SpectralConv3d(self.width, self.width, self.modes1, self.modes2, self.modes3)
         self.conv1 = SpectralConv3d(self.width, self.width, self.modes1, self.modes2, self.modes3)
@@ -120,7 +121,7 @@ class FNO3d(nn.Module):
         x = torch.cat((x, grid), dim=-1)
         x = self.fc0(x)
         x = x.permute(0, 4, 1, 2, 3)
-        x = F.pad(x, [0,self.padding]) # pad the domain if input is non-periodic
+        # x = F.pad(x, [0,self.padding]) # pad the domain if input is non-periodic
 
         x1 = self.conv0(x)
         x2 = self.w0(x)
@@ -141,7 +142,7 @@ class FNO3d(nn.Module):
         x2 = self.w3(x)
         x = x1 + x2
 
-        x = x[..., :-self.padding]
+        # x = x[..., :-self.padding]
         x = x.permute(0, 2, 3, 4, 1) # pad the domain if input is non-periodic
         x = self.fc1(x)
         x = F.gelu(x)
@@ -154,7 +155,8 @@ class FNO3d(nn.Module):
         gridx = gridx.reshape(1, size_x, 1, 1, 1).repeat([batchsize, 1, size_y, size_z, 1])
         gridy = torch.tensor(np.linspace(0, 1, size_y), dtype=torch.float)
         gridy = gridy.reshape(1, 1, size_y, 1, 1).repeat([batchsize, size_x, 1, size_z, 1])
-        gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float)
+        # gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float)
+        gridz = torch.tensor(np.linspace(0, 2*np.pi, size_z), dtype=torch.float)
         gridz = gridz.reshape(1, 1, 1, size_z, 1).repeat([batchsize, size_x, size_y, 1, 1])
         return torch.cat((gridx, gridy, gridz), dim=-1).to(device)
 
@@ -163,11 +165,16 @@ class FNO3d(nn.Module):
 ################################################################
 
 # Data set is of size (1200, 64, 64, 20)
-TRAIN_PATH = 'data/NavierStokes_V1e-5_N1200_T20.mat'
+# TRAIN_PATH = 'data/NavierStokes_V1e-5_N1200_T20.mat'
+# TEST_PATH = TRAIN_PATH
+
+# Dubins car value function data
+TRAIN_PATH = 'data/N1100_R4.mat'
 TEST_PATH = TRAIN_PATH
 
-ntrain = 1000
-ntest = 200
+
+ntrain = 100
+ntest = 20
 
 modes = 8
 width = 20
@@ -175,7 +182,7 @@ width = 20
 batch_size = 10
 batch_size2 = batch_size
 
-epochs = 10
+epochs = 50
 # epochs = 500
 learning_rate = 0.001
 scheduler_step = 100
@@ -194,29 +201,25 @@ path_image = 'image/'+path
 runtime = np.zeros(2, )
 t1 = default_timer()
 
-grid_res = 64
-sub = 8
+grid_res = 16
+sub = 1
 S = grid_res // sub
-T_in = 10
-T = 10
 
 ################################################################
 # load data
 ################################################################
 
 reader = MatReader(TRAIN_PATH)
-train_a = reader.read_field('u')[:ntrain,::sub,::sub,:T_in]
-train_u = reader.read_field('u')[:ntrain,::sub,::sub,T_in:T_in+T]
+train_a = reader.read_field('a_out')[:ntrain,::sub,::sub,::sub]
+train_u = reader.read_field('u_out')[:ntrain,::sub,::sub,::sub]
 
 reader = MatReader(TEST_PATH)
-test_a = reader.read_field('u')[-ntest:,::sub,::sub,:T_in]
-test_u = reader.read_field('u')[-ntest:,::sub,::sub,T_in:T_in+T]
+test_a = reader.read_field('a_out')[-ntest:,::sub,::sub,::sub]
+test_u = reader.read_field('u_out')[-ntest:,::sub,::sub,::sub]
 
-print(train_u.shape)
-print(test_u.shape)
-print("shape of input data", reader.read_field('u').shape)
+print("shape of input data", reader.read_field('u_out').shape)
 assert (S == train_u.shape[-2])
-assert (T == train_u.shape[-1])
+assert (S == train_u.shape[-1])
 
 
 a_normalizer = UnitGaussianNormalizer(train_a)
@@ -226,10 +229,8 @@ test_a = a_normalizer.encode(test_a)
 y_normalizer = UnitGaussianNormalizer(train_u)
 train_u = y_normalizer.encode(train_u)
 
-print("before reshape: ", train_a.shape)
-train_a = train_a.reshape(ntrain,S,S,1,T_in).repeat([1,1,1,T,1])
-test_a = test_a.reshape(ntest,S,S,1,T_in).repeat([1,1,1,T,1])
-print("after reshape: ", train_a.shape)
+train_a = train_a.reshape(ntrain,S,S,S,1)
+test_a = test_a.reshape(ntest,S,S,S,1)
 
 train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_a, train_u), batch_size=batch_size, shuffle=True)
 test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u), batch_size=batch_size, shuffle=False)
@@ -261,7 +262,7 @@ for ep in range(epochs):
         x, y = x.cuda(), y.cuda()
 
         optimizer.zero_grad()
-        out = model(x).view(batch_size, S, S, T)
+        out = model(x).view(batch_size, S, S, S)
 
         mse = F.mse_loss(out, y, reduction='mean')
         # mse.backward()
@@ -283,7 +284,7 @@ for ep in range(epochs):
         for x, y in test_loader:
             x, y = x.cuda(), y.cuda()
 
-            out = model(x).view(batch_size, S, S, T)
+            out = model(x).view(batch_size, S, S, S)
             out = y_normalizer.decode(out)
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 
@@ -305,7 +306,7 @@ with torch.no_grad():
         x, y = x.cuda(), y.cuda()
 
         # out = model(x)
-        out = model(x).view(S, S, T)
+        out = model(x).view(S, S, S)
         # print("out shape: ", out.shape)
         # print("mean shape: ", y_normalizer.mean.shape)
         # print("std shape: ", y_normalizer.std.shape)

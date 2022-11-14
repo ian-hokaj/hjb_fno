@@ -1,0 +1,18 @@
+driver.m
+-Changed driving parameters
+- Only one initial condition
+
+HJBsolve.m
+- rechaped coefficient matrices to (k,3) from (k,6)
+- ommitting controls u4, u5, u6, u7
+- Change uN output
+
+
+illegalPoses.m
+- No illegal poses from obstacles
+
+
+optimalPath.m
+- can only take 3 actions
+
+
