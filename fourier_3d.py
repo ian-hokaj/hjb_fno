@@ -261,6 +261,7 @@ for ep in range(epochs):
         x, y = x.cuda(), y.cuda()
 
         optimizer.zero_grad()
+        print("Training output shape: ", model(x).shape)
         out = model(x).view(batch_size, S, S, T)
 
         mse = F.mse_loss(out, y, reduction='mean')

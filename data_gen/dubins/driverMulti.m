@@ -8,7 +8,7 @@ d = 0.0;
 %% set up grid
 N_samples = 1100;   % number of trials
 
-M = 2^4;    % grid resolution
+M = 2^5;    % grid resolution
 % M = 51;
 grid.x = linspace(-1,1,M); grid.y = linspace(-1,1,M);
 grid.s = linspace(0,2*pi,M);
@@ -30,6 +30,7 @@ end
 
 %% desired ending configuration
 % xf = 0.0; yf = 0.0; sf = pi; % for circles example
+% Should probably make it not go all the way to the boundaries
 Xf = 2 * rand(N_samples,1) - 1;
 Yf = 2 * rand(N_samples,1) - 1;
 Sf = 2*pi * rand(N_samples,1);
@@ -73,8 +74,8 @@ for i = 1:N_samples
 %     fprintf('[I,J,K] = [%i,%i,%i]. Solved HJB equation in %.2f sec.\n',M,M,M,T2);
 
     % store initial and final value function, dropping spatial ghost modes
-    a_out(i,:,:,:) = u0(2:end-1, 2:end-1, :);
-    u_out(i,:,:,:) = uN(2:end-1, 2:end-1, :);
+    a_out(i,:,:,:) = u0(1+grid.gn:end-grid.gn, 1+grid.gn:end-grid.gn, :);
+    u_out(i,:,:,:) = uN(1+grid.gn:end-grid.gn, 1+grid.gn:end-grid.gn, :);
 end
 
 %% compute optimal paths
@@ -93,4 +94,4 @@ p{4}.color = [0.5 0.5 0.5];
 
 %% save results in current.mat
 % save current.mat R d grid obs_x obs_y p s0 sf uN x0 xf y0 yf;
-save data/N1100_R4.mat a_out u_out
+save data/N1100_R5.mat a_out u_out

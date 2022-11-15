@@ -169,7 +169,7 @@ class FNO3d(nn.Module):
 # TEST_PATH = TRAIN_PATH
 
 # Dubins car value function data
-TRAIN_PATH = 'data/N1100_R4.mat'
+TRAIN_PATH = 'data/N1100_R5.mat'
 TEST_PATH = TRAIN_PATH
 
 
@@ -201,7 +201,7 @@ path_image = 'image/'+path
 runtime = np.zeros(2, )
 t1 = default_timer()
 
-grid_res = 16
+grid_res = 32
 sub = 1
 S = grid_res // sub
 
@@ -222,12 +222,15 @@ assert (S == train_u.shape[-2])
 assert (S == train_u.shape[-1])
 
 
-a_normalizer = UnitGaussianNormalizer(train_a)
+# a_normalizer = UnitGaussianNormalizer(train_a)
+a_normalizer = RangeNormalizer(train_a)
 train_a = a_normalizer.encode(train_a)
+a_normalizer = RangeNormalizer(test_a)
 test_a = a_normalizer.encode(test_a)
 
-y_normalizer = UnitGaussianNormalizer(train_u)
-train_u = y_normalizer.encode(train_u)
+# y_normalizer = UnitGaussianNormalizer(train_u)
+# y_normalizer = RangeNormalizer(train_a)
+# train_u = y_normalizer.encode(train_u)
 
 train_a = train_a.reshape(ntrain,S,S,S,1)
 test_a = test_a.reshape(ntest,S,S,S,1)
@@ -246,13 +249,13 @@ device = torch.device('cuda')
 model = FNO3d(modes, modes, modes, width).cuda()
 # model = torch.load('model/ns_fourier_V100_N1000_ep100_m8_w20')
 
-print(count_params(model))
+print("Number of model parameters: ", count_params(model))
 optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
 
 
 myloss = LpLoss(size_average=False)
-y_normalizer.cuda()
+# y_normalizer.cuda()
 for ep in range(epochs):
     model.train()
     t1 = default_timer()
@@ -267,8 +270,8 @@ for ep in range(epochs):
         mse = F.mse_loss(out, y, reduction='mean')
         # mse.backward()
 
-        y = y_normalizer.decode(y)
-        out = y_normalizer.decode(out)
+        # y = y_normalizer.decode(y)
+        # out = y_normalizer.decode(out)
         l2 = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         l2.backward()
 
@@ -285,7 +288,7 @@ for ep in range(epochs):
             x, y = x.cuda(), y.cuda()
 
             out = model(x).view(batch_size, S, S, S)
-            out = y_normalizer.decode(out)
+            # out = y_normalizer.decode(out)
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 
     train_mse /= len(train_loader)
@@ -310,7 +313,7 @@ with torch.no_grad():
         # print("out shape: ", out.shape)
         # print("mean shape: ", y_normalizer.mean.shape)
         # print("std shape: ", y_normalizer.std.shape)
-        out = y_normalizer.decode(out)
+        # out = y_normalizer.decode(out)
         pred[index] = out
 
         test_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()

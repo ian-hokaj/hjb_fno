@@ -135,18 +135,36 @@ class GaussianNormalizer(object):
 
 # normalization, scaling by range
 class RangeNormalizer(object):
-    def __init__(self, x, low=0.0, high=1.0):
+    def __init__(self, x, low=0.0, high=1.0, eps=0.00001):
         super(RangeNormalizer, self).__init__()
-        mymin = torch.min(x, 0)[0].view(-1)
-        mymax = torch.max(x, 0)[0].view(-1)
 
+        mymin = x.reshape(x.size()[0], -1).min(axis=-1)[0]
+        mymax = x.reshape(x.size()[0], -1).max(axis=-1)[0]
+        # mymin = torch.min(x, 0)[0].view(-1)
+        # mymax = torch.max(x, 0)[0].view(-1)
+        print("mymin: ", mymin)
+        print("mymax: ", mymax)
+        print(mymin.size())
+        print(mymax.size())
+        # self.eps = eps
         self.a = (high - low)/(mymax - mymin)
         self.b = -self.a*mymax + high
+        # self.b = -self.a * mymin
+
+        print("a: ", self.a)
+        print("b: ", self.b)
+        self.a = self.a.view(self.a.size()[0], 1, 1, 1)
+        self.b = self.b.view(self.b.size()[0], 1, 1, 1)
 
     def encode(self, x):
         s = x.size()
-        x = x.view(s[0], -1)
+        print("size of x: ", s)
+        print("size of a: ", self.a.size())
+        print("size of b: ", self.b.size())
+
+        print("size of a*x: ", torch.mul(self.a,x))
         x = self.a*x + self.b
+        print("normalized x: ", x)
         x = x.view(s)
         return x
 
@@ -156,6 +174,10 @@ class RangeNormalizer(object):
         x = (x - self.b)/self.a
         x = x.view(s)
         return x
+
+    def cuda(self):
+        self.a = self.a.cuda()
+        self.b = self.b.cuda()
 
 #loss function with rel/abs Lp loss
 class LpLoss(object):
