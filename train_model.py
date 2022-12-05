@@ -10,8 +10,8 @@ from hjb_fourier_3d import FNO3d
 ################################################################
 # configs
 ################################################################
-ntrain = 1000
-ntest = 100
+ntrain = 90
+ntest = 10
 
 modes = 8
 width = 20
@@ -30,7 +30,7 @@ sub = 2**0
 S = grid_res // sub
 
 # Dubins car value function data
-TRAIN_PATH = f'data/N1100_R{R}_clip.mat'
+TRAIN_PATH = f'data/N100_R{R}_corner.mat'
 TEST_PATH = TRAIN_PATH
 
 path = f'fno_R{R}_sub{sub}_ep{epochs}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'

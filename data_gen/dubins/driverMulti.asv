@@ -59,16 +59,13 @@ for i = 1:N_samples
     sf = Sf(i,1);
 
     % initialization
-    i;
     [~,init_x] = min(abs(grid.x-xf));
     [~,init_y] = min(abs(grid.y-yf));
     [~,init_s] = min(abs(grid.s-sf));
 
    % Floor to corner, for subsampling bug
    sub_max = 2;
-   init_x = sub_max * floor(init_x / sub_max);
-   init_y = sub_max * floor(init_y / sub_max);
-   init_s = sub_max * floor(init_s / sub_max);
+   init_x = sub_max *
 
     u0 = 200*ones(length(grid.x),length(grid.y),length(grid.s));
     u0(init_x,init_y,init_s) = 0;

@@ -9,3 +9,6 @@ Results
 
 - [ ] Get upscale working
 -- training downsampled model has high train/test error...
+-- maybe because it's missing the 0? (I think definitely)
+---TRY: 1) goal state (instead of goal set)
+---TRY: 2) 
