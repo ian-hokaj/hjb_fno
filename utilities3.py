@@ -137,47 +137,50 @@ class GaussianNormalizer(object):
 class RangeNormalizer(object):
     def __init__(self, x, low=0.0, high=1.0, eps=0.00001):
         super(RangeNormalizer, self).__init__()
-
-        mymin = x.reshape(x.size()[0], -1).min(axis=-1)[0]
-        mymax = x.reshape(x.size()[0], -1).max(axis=-1)[0]
-        # mymin = torch.min(x, 0)[0].view(-1)
-        # mymax = torch.max(x, 0)[0].view(-1)
-        print("mymin: ", mymin)
-        print("mymax: ", mymax)
-        print(mymin.size())
-        print(mymax.size())
-        # self.eps = eps
-        self.a = (high - low)/(mymax - mymin)
-        self.b = -self.a*mymax + high
-        # self.b = -self.a * mymin
-
-        print("a: ", self.a)
-        print("b: ", self.b)
-        self.a = self.a.view(self.a.size()[0], 1, 1, 1)
-        self.b = self.b.view(self.b.size()[0], 1, 1, 1)
+        self.mymin = torch.min(x, dim=0)[0].view(-1)
+        self.mymax = torch.max(x, dim=0)[0].view(-1)
+        self.eps = eps
 
     def encode(self, x):
         s = x.size()
-        print("size of x: ", s)
-        print("size of a: ", self.a.size())
-        print("size of b: ", self.b.size())
-
-        print("size of a*x: ", torch.mul(self.a,x))
-        x = self.a*x + self.b
-        print("normalized x: ", x)
+        print("s: ", s)
+        x = x.reshape(s[0], -1)
+        print(x.size())
+        print("min before: ", torch.min(x))
+        print("max before: ", torch.max(x))
+        x = (x - self.mymin) / (self.mymax - self.mymin + self.eps)
+        # print("normalized x: ", x)
+        print("min in x: ", torch.min(x))
+        print("max in x: ", torch.max(x))
         x = x.view(s)
+        print(x)
         return x
 
     def decode(self, x):
         s = x.size()
         x = x.view(s[0], -1)
-        x = (x - self.b)/self.a
+        x = x * (self.mymax - self.mymin) + self.mymin
         x = x.view(s)
         return x
 
     def cuda(self):
-        self.a = self.a.cuda()
-        self.b = self.b.cuda()
+        self.mymin = self.mymin.cuda()
+        self.mymax = self.mymax.cuda()
+
+class ScaleNormalizer(object):
+    def __init__(self, x, ub, lb):
+        self.upper_bound = ub
+        self.lower_bound = lb
+
+    def encode(self, x):
+        x = (x - self.lower_bound) / self.upper_bound
+        return x
+
+    def decode(self, x):
+        x = (x * self.upper_bound) + self.lower_bound
+        return x
+
+    # No .cuda() needed, as max/min are scalars
 
 #loss function with rel/abs Lp loss
 class LpLoss(object):

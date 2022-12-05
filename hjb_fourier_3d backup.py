@@ -151,12 +151,214 @@ class FNO3d(nn.Module):
 
     def get_grid(self, shape, device):
         batchsize, size_x, size_y, size_z = shape[0], shape[1], shape[2], shape[3]
-        gridx = torch.tensor(np.linspace(-1, 1, size_x), dtype=torch.float)
+        gridx = torch.tensor(np.linspace(0, 1, size_x), dtype=torch.float)
         gridx = gridx.reshape(1, size_x, 1, 1, 1).repeat([batchsize, 1, size_y, size_z, 1])
-        gridy = torch.tensor(np.linspace(-1, 1, size_y), dtype=torch.float)
+        gridy = torch.tensor(np.linspace(0, 1, size_y), dtype=torch.float)
         gridy = gridy.reshape(1, 1, size_y, 1, 1).repeat([batchsize, size_x, 1, size_z, 1])
         # gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float)
         gridz = torch.tensor(np.linspace(0, 2*np.pi, size_z), dtype=torch.float)
         gridz = gridz.reshape(1, 1, 1, size_z, 1).repeat([batchsize, size_x, size_y, 1, 1])
         return torch.cat((gridx, gridy, gridz), dim=-1).to(device)
 
+################################################################
+# configs
+################################################################
+
+# Data set is of size (1200, 64, 64, 20)
+# TRAIN_PATH = 'data/NavierStokes_V1e-5_N1200_T20.mat'
+# TEST_PATH = TRAIN_PATH
+
+# Dubins car value function data
+TRAIN_PATH = 'data/N1100_R4_clip.mat'
+TEST_PATH = TRAIN_PATH
+
+
+ntrain = 100
+ntest = 10
+
+modes = 8
+width = 20
+
+batch_size = 20
+batch_size2 = batch_size
+
+epochs = 5
+learning_rate = 0.001
+scheduler_step = 100
+scheduler_gamma = 0.5
+
+print(epochs, learning_rate, scheduler_step, scheduler_gamma)
+
+path = 'fno_R4_full_v1'
+# path = 'ns_fourier_V100_N'+str(ntrain)+'_ep' + str(epochs) + '_m' + str(modes) + '_w' + str(width)
+path_model = 'model/'+path
+path_train_err = 'results/'+path+'train.txt'
+path_test_err = 'results/'+path+'test.txt'
+path_image = 'image/'+path
+
+
+runtime = np.zeros(2, )
+t1 = default_timer()
+
+grid_res = 2**5
+sub = 1
+S = grid_res // sub
+
+################################################################
+# load data
+################################################################
+
+reader = MatReader(TRAIN_PATH)
+train_a = reader.read_field('a_out')[:ntrain,::sub,::sub,::sub]
+train_u = reader.read_field('u_out')[:ntrain,::sub,::sub,::sub]
+
+reader = MatReader(TEST_PATH)
+test_a = reader.read_field('a_out')[-ntest:,::sub,::sub,::sub]
+test_u = reader.read_field('u_out')[-ntest:,::sub,::sub,::sub]
+
+print("shape of input data", reader.read_field('u_out').shape)
+assert (S == train_u.shape[-2])
+assert (S == train_u.shape[-1])
+
+# # a_normalizer = UnitGaussianNormalizer(train_a)
+# a_normalizer = RangeNormalizer(train_a)
+# train_a = a_normalizer.encode(train_a)
+# a_normalizer = RangeNormalizer(test_a)
+# test_a = a_normalizer.encode(test_a)
+
+# # y_normalizer = UnitGaussianNormalizer(train_u)
+# y_normalizer = RangeNormalizer(train_u)
+# train_u = y_normalizer.encode(train_u)
+
+train_a = train_a.reshape(ntrain,S,S,S,1)
+test_a = test_a.reshape(ntest,S,S,S,1)
+
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_a, train_u), batch_size=batch_size, shuffle=True)
+test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u), batch_size=batch_size, shuffle=False)
+
+t2 = default_timer()
+
+print('preprocessing finished, time used:', t2-t1)
+device = torch.device('cuda')
+
+################################################################
+# training and evaluation
+################################################################
+model = FNO3d(modes, modes, modes, width).cuda()
+# model = torch.load('model/ns_fourier_V100_N1000_ep100_m8_w20')
+
+print("Number of model parameters: ", count_params(model))
+optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
+
+
+myloss = LpLoss(size_average=False)
+# y_normalizer.cuda()
+for ep in range(epochs):
+    model.train()
+    t1 = default_timer()
+    train_mse = 0
+    train_l2 = 0
+    for x, y in train_loader:
+        x, y = x.cuda(), y.cuda()
+
+        optimizer.zero_grad()
+        out = model(x).view(batch_size, S, S, S)
+
+        mse = F.mse_loss(out, y, reduction='mean')
+        # mse.backward()
+
+        # y = y_normalizer.decode(y)
+        # out = y_normalizer.decode(out)
+        l2 = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
+        l2.backward()
+
+        optimizer.step()
+        train_mse += mse.item()
+        train_l2 += l2.item()
+
+    scheduler.step()
+
+    model.eval()
+    test_l2 = 0.0
+    with torch.no_grad():
+        for x, y in test_loader:
+            x, y = x.cuda(), y.cuda()
+
+            out = model(x).view(batch_size, S, S, S)
+
+            # y = y_normalizer.decode(y)
+            # out = y_normalizer.decode(out)
+            test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+
+    train_mse /= len(train_loader)
+    train_l2 /= ntrain
+    test_l2 /= ntest
+
+    t2 = default_timer()
+    print(ep, t2-t1, train_mse, train_l2, test_l2)
+# torch.save(model, path_model)
+
+
+
+### GENERATE PREDICITONS FOR TRAIN AND TEST DATA WITH TRAINED MODEL
+
+pred = torch.cat((torch.zeros(train_u.shape), torch.zeros(test_u.shape)), 0)
+print(pred.shape)
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_a, train_u),
+                                          batch_size=1,
+                                          shuffle=False,
+                                          )
+test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u),
+                                          batch_size=1,
+                                          shuffle=False,
+                                          )
+with torch.no_grad():
+    index = 0
+    for x, y in train_loader:
+        train_l2 = 0
+        x, y = x.cuda(), y.cuda()
+
+        out = model(x).view(S,S,S)
+        pred[index] = out
+        train_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()
+        print(index, train_l2)
+        index += 1
+
+    for x, y in test_loader:
+        test_l2 = 0
+        x, y = x.cuda(), y.cuda()
+
+        # out = model(x)
+        out = model(x).view(S, S, S)
+        # y = y_normalizer.decode(y)
+        # out = y_normalizer.decode(out)
+        pred[index] = out
+
+        test_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()
+        print(index, test_l2)
+        index = index + 1
+
+# scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})
+
+
+
+# pred = torch.zeros(test_u.shape)
+# index = 0
+# test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a, test_u), batch_size=1, shuffle=False)
+# with torch.no_grad():
+#     for x, y in test_loader:
+#         test_l2 = 0
+#         x, y = x.cuda(), y.cuda()
+
+#         # out = model(x)
+#         out = model(x).view(S, S, S)
+#         # y = y_normalizer.decode(y)
+#         # out = y_normalizer.decode(out)
+#         pred[index] = out
+
+#         test_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()
+#         print(index, test_l2)
+#         index = index + 1
+
+# scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})

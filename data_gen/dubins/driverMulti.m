@@ -6,11 +6,12 @@ W = 6;       % maximum angular velocity
 R = 0.0;
 d = 0.0;
 %% set up grid
-N_samples = 1100;   % number of trials
+N_samples = 10;   % number of trials
 
 M = 2^5;    % grid resolution
-% M = 51;
-grid.x = linspace(-1,1,M); grid.y = linspace(-1,1,M);
+
+grid.x = linspace(-1,1,M);
+grid.y = linspace(-1,1,M);
 grid.s = linspace(0,2*pi,M);
 grid.dx = grid.x(2) - grid.x(1);
 grid.dy = grid.y(2) - grid.y(1);
@@ -31,19 +32,26 @@ end
 %% desired ending configuration
 % xf = 0.0; yf = 0.0; sf = pi; % for circles example
 % Should probably make it not go all the way to the boundaries
-Xf = 2 * rand(N_samples,1) - 1;
-Yf = 2 * rand(N_samples,1) - 1;
-Sf = 2*pi * rand(N_samples,1);
+% Fix seeds for random number generation
+rng('default');
+rng(1);
+Xf = 0.8*(2 * rand(N_samples,1) - 1);
+rng(2);
+Yf = 0.8*(2 * rand(N_samples,1) - 1);
+rng(3);
+Sf = 0.8*(2*pi * rand(N_samples,1));
 
 %% Initialize/Sovle N_samples HJB Equations
 % a_out = zeros(N_samples, length(grid.x), length(grid.y), length(grid.s));
 % u_out = zeros(N_samples, length(grid.x), length(grid.y), length(grid.s));
 a_out = zeros(N_samples, M, M, M);
 u_out = zeros(N_samples, M, M, M);
-
+tic
 for i = 1:N_samples
     if mod(i,10) == 0
         fprintf('%i', i);
+        toc
+        tic
         fprintf('\n');
     end
 
@@ -57,11 +65,15 @@ for i = 1:N_samples
     [~,init_y] = min(abs(grid.y-yf));
     [~,init_s] = min(abs(grid.s-sf));
     u0 = 200*ones(length(grid.x),length(grid.y),length(grid.s));
-    u0(init_x,init_y,init_s) = 0;
-    if init_s == 1 || init_s == size(u0,3)
-        u0(init_x,init_y,1) = 0;
-        u0(init_x,init_y,end) = 0;
-    end
+    init_xs = [init_x, init_x+1, init_x+2, init_x+3];
+    init_ys = [init_y, init_y+1, init_y+2, init_y+3];
+    init_ss = [init_s, init_s+1, init_s+2, init_s+3];
+    u0(init_xs, init_ys, init_ss) = 0;
+%     u0(init_x,init_y,init_s) = 0;
+%     if init_s == 1 || init_s == size(u0,3)
+%         u0(init_x,init_y,1) = 0;
+%         u0(init_x,init_y,end) = 0;
+%     end
     
     % determine illegal poses
     % STATIONARY OBSTACLES
@@ -80,18 +92,28 @@ end
 
 %% compute optimal paths
 x0 = -0.8; y0 = 0.8; s0 = 3*pi/2;
+% p{1} = fnoOptimalPath(grid,uN,W,d,x0,y0,s0,xf,yf,sf);
 p{1} = optimalPath(grid,u,W,d,x0,y0,s0,xf,yf,sf);
 p{1}.color = [0.5 0.5 1];
-x0 = 0.8; y0 = 0.8; s0 = pi/4;
+
+x0 = 0.8; y0 = 0.8; s0 = 7*pi/4;
+% p{2} = fnoPath(grid,uN,W,d,x0,y0,s0,xf,yf,sf);
 p{2} = optimalPath(grid,u,W,d,x0,y0,s0,xf,yf,sf);
 p{2}.color = [1 0.5 0.5];
+
 x0 = 0.8; y0 = -0.8; s0 = 5*pi/4;
+% p{3} = fnoPath(grid,uN,W,d,x0,y0,s0,xf,yf,sf);
 p{3} = optimalPath(grid,u,W,d,x0,y0,s0,xf,yf,sf);
 p{3}.color = [0.25 0.75 0.25];
+
 x0 = -0.8; y0 = -0.8; s0 = 3*pi/2;
+% p{4} = fnoPath(grid,uN,W,d,x0,y0,s0,xf,yf,sf);
 p{4} = optimalPath(grid,u,W,d,x0,y0,s0,xf,yf,sf);
 p{4}.color = [0.5 0.5 0.5];
 
 %% save results in current.mat
-% save current.mat R d grid obs_x obs_y p s0 sf uN x0 xf y0 yf;
-save data/N1100_R5.mat a_out u_out
+% save params/params_R4.mat R d W grid obs_x obs_y
+% save params/finalStates_R4.mat Xf Yf Sf
+save current.mat R d grid obs_x obs_y p s0 sf uN x0 xf y0 yf;
+% save data/N1100_R6_clip.mat a_out u_out
+save('data/N10_R5.mat', 'a_out', 'u_out', '-v7.3')
