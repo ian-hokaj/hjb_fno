@@ -14,20 +14,19 @@ from utilities3 import *
 # configs
 ################################################################
 # Sampling parameters
-R = 5
-sub_coarse = 2**1
-sub_fine = 2**1
+R = 6
+sub_coarse = 2**2
+sub_fine = 2**0
 grid_res = 2**R
 S = grid_res // sub_fine
 S_coarse = grid_res // sub_coarse
 
-ntrain = 1000
-ntest = 100
+ntrain = 100
+ntest = 10
 
 # Read training hyperparameters
 batch_size = 10
-batch_size2 = batch_size
-epochs = 100
+epochs = 500
 learning_rate = 0.001
 scheduler_step = 100
 scheduler_gamma = 0.5
@@ -37,14 +36,15 @@ modes = 8
 width = 20
 
 
-TRAIN_PATH = f'data/N1100_R{R}_clip.mat'
+TRAIN_PATH = f'data/N110_R{R}_fill.mat'
+# TRAIN_PATH = f'data/N1100_R{R}_corner.mat'
 TEST_PATH = TRAIN_PATH
 
-path_downscale = f'fno_R{R}_sub{sub_coarse}_ep{epochs}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
+path_downscale = f'fno_R{R}_sub{sub_coarse}_ep{epochs}_ba{batch_size}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
 path_model = 'model/'+path_downscale
 path_eval = 'eval/'+path_downscale+'.mat'
 
-path_upscale = f'fno_R{R}_sub{sub_fine}_ep{epochs}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
+path_upscale = f'fno_R{R}_sub{sub_fine}_ep{epochs}_ba{batch_size}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
 path_upscale_pred = 'pred/upscale/' + path_upscale + '.mat'
 
 ################################################################
@@ -66,6 +66,8 @@ train_u = reader.read_field('u_out')[:ntrain,::sub_coarse,::sub_coarse,::sub_coa
 reader = MatReader(TEST_PATH)
 test_a = reader.read_field('a_out')[-ntest:,::sub_coarse,::sub_coarse,::sub_coarse].view(1,ntest,S_coarse,S_coarse,S_coarse)
 test_u = reader.read_field('u_out')[-ntest:,::sub_coarse,::sub_coarse,::sub_coarse].view(1,ntest,S_coarse,S_coarse,S_coarse)
+# test_a = reader.read_field('a_out')[:ntest,::sub_coarse,::sub_coarse,::sub_coarse].view(1,ntest,S_coarse,S_coarse,S_coarse)
+# test_u = reader.read_field('u_out')[:ntest,::sub_coarse,::sub_coarse,::sub_coarse].view(1,ntest,S_coarse,S_coarse,S_coarse)
 
 print("input shape; ", train_a.shape)
 upscale_ratio = sub_coarse // sub_fine
@@ -97,12 +99,15 @@ train_u = reader.read_field('u_out')[:ntrain,::sub_fine,::sub_fine,::sub_fine]
 reader = MatReader(TEST_PATH)
 test_a = reader.read_field('a_out')[-ntest:,::sub_fine,::sub_fine,::sub_fine]
 test_u = reader.read_field('u_out')[-ntest:,::sub_fine,::sub_fine,::sub_fine]
+# test_a = reader.read_field('a_out')[:ntest,::sub_fine,::sub_fine,::sub_fine]
+# test_u = reader.read_field('u_out')[:ntest,::sub_fine,::sub_fine,::sub_fine]
 
 # Normalize (ignore) and reshape
 train_a = train_a.reshape(ntrain,S,S,S,1)
 test_a = test_a.reshape(ntest,S,S,S,1)
 
 # Load the model
+print("Loading model: ", path_model)
 model = torch.load(path_model)
 myloss = torch.nn.MSELoss(reduction='mean')
 train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_a, train_u),
@@ -125,6 +130,7 @@ print("Shape of train input: ", train_a.shape)
 ################################################################
 test_l2s = []
 test_l2s_interp = []
+pred = torch.zeros((ntrain+ntest,S,S,S))
 
 with torch.no_grad():
     index = 0
@@ -135,12 +141,12 @@ with torch.no_grad():
 
         out = model(x).view(1,S,S,S)
         out_interp = train_u_interp[index,:,:,:].view(1,S,S,S).cuda()
-        # pred[index] = out
+        pred[index] = out.view(S,S,S)
         # train_l2 = myloss(out.view(1, -1), y.view(1, -1)).item()
         # train_mse = F.mse_loss(out.view(1, -1), y.view(1, -1), reduction='mean').item()
         train_l2 = np.sqrt(myloss(out, y).item())
         interp_l2 = np.sqrt(myloss(out_interp, y).item())
-        # print(index, train_l2)
+        print(index, train_l2, interp_l2)
 
         # train_l2s.append(train_l2)
         # train_mses.append(train_mse)
@@ -154,7 +160,7 @@ with torch.no_grad():
         out = model(x).view(1,S,S,S)
         out_interp = test_u_interp[index,:,:,:].view(1,S,S,S).cuda()
         # out = y_normalizer.decode(out)
-        # pred[index] = out
+        pred[index] = out.view(S,S,S)
 
         # test_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()
         # test_mse = F.mse_loss(out.view(1, -1), y.view(1, -1)).item()
@@ -173,3 +179,9 @@ avg_test_l2_interp = np.mean(test_l2s_interp)
 print("Average Test L2: ", avg_test_l2)
 print("Average Interpolated Test L2: ", avg_test_l2_interp)
 
+save_flag = input("Save upscale evaluation? (y/n): ")
+if save_flag == 'y':    
+    scipy.io.savemat(path_upscale_pred, mdict={'x': torch.cat((train_a, test_a), dim=0).numpy(),
+                                               'y': torch.cat((train_u, test_u), dim=0).numpy(),
+                                               'pred': pred.cpu().numpy(),
+                                      })

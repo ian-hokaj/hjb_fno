@@ -45,6 +45,7 @@ for n = 1:length(grid.t)-1
     
     % stopping condition (if within grid length of goal)
     if norm([x(n+1)-xf;y(n+1)-yf;s(n+1)-sf],2) < norm([dx;dy;ds],2)/2 || norm([x(n+1)-xf;y(n+1)-yf;s(n+1)-sf-2*pi],2) < norm([dx;dy;ds],2)/2
+%     if norm([x(n+1)-xf;y(n+1)-yf;s(n+1)-sf],2) < norm([4*dx;4*dy;4*ds],2)/2 || norm([x(n+1)-xf;y(n+1)-yf;s(n+1)-sf-2*pi],2) < norm([4*dx;4*dy;4*ds],2)/2
         break 
     end
 end

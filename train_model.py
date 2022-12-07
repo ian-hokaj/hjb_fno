@@ -10,7 +10,7 @@ from hjb_fourier_3d import FNO3d
 ################################################################
 # configs
 ################################################################
-ntrain = 90
+ntrain = 100
 ntest = 10
 
 modes = 8
@@ -19,21 +19,23 @@ width = 20
 batch_size = 10
 batch_size2 = batch_size
 
-epochs = 100
+epochs = 500
 learning_rate = 0.001
 scheduler_step = 100
 scheduler_gamma = 0.5
 
-R = 5
+R = 6
 grid_res = 2**R
-sub = 2**0
+sub = 2**2
 S = grid_res // sub
 
 # Dubins car value function data
-TRAIN_PATH = f'data/N100_R{R}_corner.mat'
+TRAIN_PATH = f'data/N110_R{R}_corner_fill.mat'  # filled goal set
+# TRAIN_PATH = f'data/N1100_R{R}_corner.mat'  # 0 values fixed to the corners
+# TRAIN_PATH = f'data/N1100_R{R}_clip.mat'
 TEST_PATH = TRAIN_PATH
 
-path = f'fno_R{R}_sub{sub}_ep{epochs}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
+path = f'fno_R{R}_sub{sub}_ep{epochs}_ba{batch_size}_lr{learning_rate}_step{scheduler_step}_gamma{scheduler_gamma}'
 path_model = 'model/'+path
 path_pred = 'pred/'+path+'.mat'
 path_train_err = 'results/'+path+'train.txt'
@@ -41,7 +43,6 @@ path_test_err = 'results/'+path+'test.txt'
 
 runtime = np.zeros(2, )
 t1 = default_timer()
-
 
 
 ################################################################
@@ -55,6 +56,18 @@ train_u = reader.read_field('u_out')[:ntrain,::sub,::sub,::sub]
 reader = MatReader(TEST_PATH)
 test_a = reader.read_field('a_out')[-ntest:,::sub,::sub,::sub]
 test_u = reader.read_field('u_out')[-ntest:,::sub,::sub,::sub]
+# test_a = reader.read_field('a_out')[:ntest,::sub,::sub,::sub]
+# test_u = reader.read_field('u_out')[:ntest:,::sub,::sub,::sub]
+
+# print("Where 0?: ", type((test_u[:,:,:,:] == 0).nonzero()))
+# print("train 0s: ", (train_a[:,:,:,:] == 0).nonzero().shape)
+# print("where 0?: ", (test_a[:,:,:,:] == 0).nonzero().shape)
+# assert ntrain == (train_a[:,:,:,:] == 0).nonzero().shape[0],    "0s not picked up in subsampling"
+# assert ntrain == (train_u[:,:,:,:] == 0).nonzero().shape[0],    "0s not picked up in subsampling"
+# assert ntest == (test_a[:,:,:,:] == 0).nonzero().shape[0],      "0s not picked up in subsampling"
+# assert ntest == (test_u[:,:,:,:] == 0).nonzero().shape[0],      "0s not picked up in subsampling"
+# print("train 0s: ", (train_a[:,:,:,:] == 0).nonzero().shape, )
+# print("where 0?: ", (test_a[:,:,:,:] == 0).nonzero().shape)
 
 print("shape of input data", reader.read_field('a_out').shape)
 print("Shape of subsampled data: ", train_a.shape)

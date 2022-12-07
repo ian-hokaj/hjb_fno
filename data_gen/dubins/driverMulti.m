@@ -6,9 +6,9 @@ W = 6;       % maximum angular velocity
 R = 0.0;
 d = 0.0;
 %% set up grid
-N_samples = 100;   % number of trials
+N_samples = 1100;   % number of trials
 
-M = 2^5;    % grid resolution
+M = 2^6;    % grid resolution
 
 grid.x = linspace(-1,1,M);
 grid.y = linspace(-1,1,M);
@@ -50,6 +50,9 @@ tic
 for i = 1:N_samples
     if mod(i,10) == 0
         fprintf('%i', i);
+        fprintf(', ');
+        toc
+        tic
         fprintf('\n');
     end
 
@@ -65,23 +68,28 @@ for i = 1:N_samples
     [~,init_s] = min(abs(grid.s-sf));
 
    % Floor to corner, for subsampling bug
-   sub_max = 2;
-   init_x = sub_max * floor(init_x / sub_max);
-   init_y = sub_max * floor(init_y / sub_max);
-   init_s = sub_max * floor(init_s / sub_max);
+%    sub_max = 4;
+%    init_x = sub_max * floor(init_x / sub_max) + 1 + grid.gn;  % add 1 for 1-indexing
+%    init_y = sub_max * floor(init_y / sub_max) + 1 + grid.gn;  % add ghost node since they will be removed
+%    init_s = sub_max * floor(init_s / sub_max) + 1;
+%    [i, init_x, init_y, init_s]
 
     u0 = 200*ones(length(grid.x),length(grid.y),length(grid.s));
-    u0(init_x,init_y,init_s) = 0;
-    if init_s == 1 || init_s == size(u0,3)
-        u0(init_x,init_y,1) = 0;
-        u0(init_x,init_y,end) = 0;
-    end
+%     u0(init_x,init_y,init_s) = 0;
+%     if init_s == 1 || init_s == size(u0,3)
+%         u0(init_x,init_y,1) = 0;
+%         u0(init_x,init_y,end) = 0;
+%     end
 
 %   Attempt at goal set (rather than goal state, for subsampling bug)
-%     init_xs = [init_x, init_x+1, init_x+2, init_x+3];
-%     init_ys = [init_y, init_y+1, init_y+2, init_y+3];
-%     init_ss = [init_s, init_s+1, init_s+2, init_s+3];
-%     u0(init_xs, init_ys, init_ss) = 0;
+    init_X = [init_x, init_x+1, init_x+2, init_x+3];
+    init_Y = [init_y, init_y+1, init_y+2, init_y+3];
+    init_S = [init_s, init_s+1, init_s+2, init_s+3];
+    u0(init_X, init_Y, init_S) = 0;
+    if init_s == 1 || init_s == size(u0,3)
+        u0(init_X,init_Y,1) = 0;
+        u0(init_X,init_Y,end) = 0;
+    end
     
     % determine illegal poses
     % STATIONARY OBSTACLES
@@ -124,4 +132,4 @@ p{4}.color = [0.5 0.5 0.5];
 % save params/finalStates_R4.mat Xf Yf Sf
 save current.mat R d grid obs_x obs_y p s0 sf uN x0 xf y0 yf;
 % save data/N1100_R6_clip.mat a_out u_out
-save('data/N10_R5_corner.mat', 'a_out', 'u_out', '-v7.3')
+save('data/N1100_R6_fill.mat', 'a_out', 'u_out', '-v7.3')
